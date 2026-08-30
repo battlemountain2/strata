@@ -373,6 +373,7 @@ impl PreviewState {
     fn render(self: &Rc<Self>, preview: Preview) {
         self.content_type.set_text(&preview.content_type);
         self.clear_content();
+        let is_audio = preview.content_type.starts_with("audio/");
         match preview.content {
             PreviewContent::Text { content, truncated } => {
                 let buffer = sourceview5::Buffer::new(None);
@@ -440,9 +441,10 @@ impl PreviewState {
                 video.set_vexpand(true);
                 self.media.replace(Some(video.clone()));
                 self.content.append(&video);
-                let notice = gtk::Label::new(Some(
-                    "Preview limited to the first 30 seconds. Open the file to play the full video.",
-                ));
+                let media_kind = if is_audio { "audio" } else { "video" };
+                let notice = gtk::Label::new(Some(&format!(
+                    "Preview limited to the first 30 seconds. Open the file to play the full {media_kind}."
+                )));
                 notice.add_css_class("preview-note");
                 notice.set_justify(gtk::Justification::Center);
                 notice.set_wrap(true);

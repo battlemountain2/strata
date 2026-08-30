@@ -38,11 +38,15 @@ fn recognizes_mainstream_image_and_video_formats() {
     );
     assert_eq!(
         thumbnail_kind(Path::new("clip.mkv")),
-        Some(ThumbnailKind::Video)
+        Some(ThumbnailKind::Media)
     );
     assert_eq!(
         thumbnail_kind(Path::new("clip.ogv")),
-        Some(ThumbnailKind::Video)
+        Some(ThumbnailKind::Media)
+    );
+    assert_eq!(
+        thumbnail_kind(Path::new("album-track.FLAC")),
+        Some(ThumbnailKind::Media)
     );
 }
 

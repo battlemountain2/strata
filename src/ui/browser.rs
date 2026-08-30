@@ -4956,6 +4956,7 @@ fn icon_for_name(name: &str) -> &'static str {
             | "sr2" | "srf" | "srw" | "x3f",
         ) => crate::assets::icons::PICTURES,
         Some("mp4" | "mkv" | "webm" | "mov" | "avi" | "m4v") => crate::assets::icons::VIDEOS,
+        Some("flac") => crate::assets::icons::MUSIC,
         Some("zip" | "tar" | "gz" | "bz2" | "xz" | "7z" | "rar" | "zst") => {
             crate::assets::icons::FILE_ARCHIVE
         }

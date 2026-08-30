@@ -75,6 +75,9 @@ Each archive also contains `SOURCE_COMMIT`, which records the exact commit used 
 
 Ensure `~/.local/bin` is on `PATH`, then run `strata`. Image thumbnails work without `ffmpegthumbnailer`; when `ffmpegthumbnailer` or `ffmpeg` is unavailable, video files fall back to their video icon or an unavailable preview. Bubblewrap is required: preview parsing fails closed rather than running untrusted native parsers without a sandbox. See [Preview sandbox](docs/preview-sandbox.md) for the providers, permissions, and resource limits.
 
+FLAC files with embedded cover art display album thumbnails when `ffmpegthumbnailer` is installed.
+The preview drawer can play the first 30 seconds through the sandboxed `ffmpeg` media pipeline.
+
 #### Optional HEIC/HEIF and RAW photo previews
 
 HEIC and HEIF thumbnails and previews use an installed GDK Pixbuf loader when available, then
