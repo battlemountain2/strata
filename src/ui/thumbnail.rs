@@ -75,6 +75,7 @@ impl ThumbnailCache {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ThumbnailKind {
     Image,
+    Heif,
     RawImage,
     Pdf,
     Video,
@@ -191,6 +192,7 @@ fn thumbnail_kind(path: &Path) -> Option<ThumbnailKind> {
         "png" | "jpg" | "jpeg" | "webp" | "gif" | "bmp" | "tif" | "tiff" => {
             Some(ThumbnailKind::Image)
         }
+        "heic" | "heif" => Some(ThumbnailKind::Heif),
         "3fr" | "arw" | "cr2" | "cr3" | "dcr" | "dng" | "erf" | "kdc" | "mef" | "mos" | "mrw"
         | "nef" | "nrw" | "orf" | "pef" | "raf" | "raw" | "rw2" | "rwl" | "sr2" | "srf" | "srw"
         | "x3f" => Some(ThumbnailKind::RawImage),
@@ -210,6 +212,7 @@ fn render_thumbnail(
 ) -> Result<Vec<u8>, String> {
     let operation = match kind {
         ThumbnailKind::Image => ParseOperation::ThumbnailImage,
+        ThumbnailKind::Heif => ParseOperation::ThumbnailHeif,
         ThumbnailKind::RawImage => ParseOperation::ThumbnailRaw,
         ThumbnailKind::Pdf => ParseOperation::ThumbnailPdf,
         ThumbnailKind::Video => ParseOperation::ThumbnailVideo,

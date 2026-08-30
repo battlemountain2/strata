@@ -2,6 +2,15 @@
 
 use std::fs;
 
+use super::is_heif_name;
+
+#[test]
+fn recognizes_heif_names_without_invoking_the_system_image_loader() {
+    assert!(is_heif_name(std::ffi::OsStr::new("photo.HEIC")));
+    assert!(is_heif_name(std::ffi::OsStr::new("photo.heif")));
+    assert!(!is_heif_name(std::ffi::OsStr::new("photo.jpeg")));
+}
+
 #[test]
 fn renders_requested_pdf_pages_within_the_pixel_budget() {
     let path = std::env::temp_dir().join(format!(

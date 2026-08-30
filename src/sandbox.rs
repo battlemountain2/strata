@@ -19,10 +19,12 @@ static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ParseOperation {
     ThumbnailImage,
+    ThumbnailHeif,
     ThumbnailRaw,
     ThumbnailPdf,
     ThumbnailVideo,
     PreviewImage,
+    PreviewHeif,
     PreviewPdf,
     PreviewMedia,
 }
@@ -31,10 +33,12 @@ impl ParseOperation {
     fn argument(self) -> &'static str {
         match self {
             Self::ThumbnailImage => "thumbnail-image",
+            Self::ThumbnailHeif => "thumbnail-heif",
             Self::ThumbnailRaw => "thumbnail-raw",
             Self::ThumbnailPdf => "thumbnail-pdf",
             Self::ThumbnailVideo => "thumbnail-video",
             Self::PreviewImage => "preview-image",
+            Self::PreviewHeif => "preview-heif",
             Self::PreviewPdf => "preview-pdf",
             Self::PreviewMedia => "preview-media",
         }

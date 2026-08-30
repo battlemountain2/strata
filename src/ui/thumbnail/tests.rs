@@ -17,6 +17,14 @@ fn recognizes_mainstream_image_and_video_formats() {
         Some(ThumbnailKind::Image)
     );
     assert_eq!(
+        thumbnail_kind(Path::new("iphone-photo.HEIC")),
+        Some(ThumbnailKind::Heif)
+    );
+    assert_eq!(
+        thumbnail_kind(Path::new("camera-photo.heif")),
+        Some(ThumbnailKind::Heif)
+    );
+    assert_eq!(
         thumbnail_kind(Path::new("capture.CR3")),
         Some(ThumbnailKind::RawImage)
     );

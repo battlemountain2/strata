@@ -75,7 +75,14 @@ Each archive also contains `SOURCE_COMMIT`, which records the exact commit used 
 
 Ensure `~/.local/bin` is on `PATH`, then run `strata`. Image thumbnails work without `ffmpegthumbnailer`; when `ffmpegthumbnailer` or `ffmpeg` is unavailable, video files fall back to their video icon or an unavailable preview. Bubblewrap is required: preview parsing fails closed rather than running untrusted native parsers without a sandbox. See [Preview sandbox](docs/preview-sandbox.md) for the providers, permissions, and resource limits.
 
-#### Optional RAW photo thumbnails
+#### Optional HEIC/HEIF and RAW photo previews
+
+HEIC and HEIF thumbnails and previews use an installed GDK Pixbuf loader when available, then
+fall back to ImageMagick. On Arch or Omarchy, install ImageMagick and its HEIF decoder:
+
+```bash
+sudo pacman -S --needed imagemagick libheif
+```
 
 Strata recognizes common camera RAW formats, including DNG, CR2/CR3, NEF, ARW, RAF, ORF, RW2, PEF, and X3F. RAW decoding is provided by tools already installed on the host rather than bundled into Strata. It tries, in order:
 
@@ -83,7 +90,7 @@ Strata recognizes common camera RAW formats, including DNG, CR2/CR3, NEF, ARW, R
 2. ImageMagick (`magick` or `convert`); and
 3. the LibRaw-compatible `dcraw_emu` or `dcraw` thumbnail extractor.
 
-On Arch or Omarchy, the recommended setup is:
+On Arch or Omarchy, the recommended RAW setup is:
 
 ```bash
 sudo pacman -S --needed imagemagick libraw

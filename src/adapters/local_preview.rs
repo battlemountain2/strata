@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use std::rc::Rc;
+use std::{ffi::OsStr, path::Path, rc::Rc};
 
 use gtk::{gio, glib, prelude::*};
 
@@ -59,6 +59,9 @@ impl PreviewProvider for LocalPreviewProvider {
 
             let operation = match content {
                 PreviewContent::Pdf { .. } => Some(ParseOperation::PreviewPdf),
+                PreviewContent::Image if is_heif_name(&entry.native_name) => {
+                    Some(ParseOperation::PreviewHeif)
+                }
                 PreviewContent::Image => Some(ParseOperation::PreviewImage),
                 PreviewContent::Media => Some(ParseOperation::PreviewMedia),
                 PreviewContent::Text { .. }
@@ -130,6 +133,15 @@ impl PreviewProvider for LocalPreviewProvider {
             task.abort();
         })
     }
+}
+
+fn is_heif_name(name: &OsStr) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(OsStr::to_str)
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("heic") || extension.eq_ignore_ascii_case("heif")
+        })
 }
 
 fn file_for_location(location: &Location) -> gio::File {

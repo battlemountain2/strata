@@ -16,11 +16,13 @@ pub(crate) fn run(arguments: &[String]) -> Result<(), String> {
         .map_err(|_| "Invalid preview helper size or page".to_owned())?;
 
     let (png, metadata) = match operation.as_str() {
-        "thumbnail-image" => (render_pixbuf(input, value.clamp(16, 256))?, None),
+        "thumbnail-image" => (render_image(input, value.clamp(16, 256))?, None),
+        "thumbnail-heif" => (render_imagemagick(input, value.clamp(16, 256))?, None),
         "thumbnail-raw" => (render_raw(input, value.clamp(16, 256))?, None),
         "thumbnail-pdf" => (render_pdf_thumbnail(input, value.clamp(16, 256))?, None),
         "thumbnail-video" => (render_media(input, value.clamp(16, 256))?, None),
-        "preview-image" => (render_pixbuf(input, 1400)?, None),
+        "preview-image" => (render_image(input, 1400)?, None),
+        "preview-heif" => (render_imagemagick(input, 1400)?, None),
         "preview-pdf" => {
             let (png, page, pages) = render_pdf_page(input, value)?;
             (png, Some(format!("{page} {pages}")))
@@ -46,10 +48,12 @@ fn render_pixbuf(path: &Path, size: i32) -> Result<Vec<u8>, String> {
         .map_err(|error| error.to_string())
 }
 
+fn render_image(path: &Path, size: i32) -> Result<Vec<u8>, String> {
+    render_pixbuf(path, size).or_else(|_| render_imagemagick(path, size))
+}
+
 fn render_raw(path: &Path, size: i32) -> Result<Vec<u8>, String> {
-    render_pixbuf(path, size)
-        .or_else(|_| render_imagemagick(path, size))
-        .or_else(|_| render_dcraw(path, size))
+    render_image(path, size).or_else(|_| render_dcraw(path, size))
 }
 
 fn render_imagemagick(path: &Path, size: i32) -> Result<Vec<u8>, String> {
@@ -67,7 +71,7 @@ fn render_imagemagick(path: &Path, size: i32) -> Result<Vec<u8>, String> {
             return Ok(output.stdout);
         }
     }
-    Err("No RAW image renderer succeeded".to_owned())
+    Err("ImageMagick could not render this image".to_owned())
 }
 
 fn render_dcraw(path: &Path, size: i32) -> Result<Vec<u8>, String> {
