@@ -31,6 +31,10 @@ pub(crate) fn run(arguments: &[String]) -> Result<(), String> {
             render_media_preview(input, output)?;
             return Ok(());
         }
+        "preview-audio" => {
+            render_audio_preview(input, output)?;
+            return Ok(());
+        }
         _ => return Err("Unknown preview helper operation".to_owned()),
     };
     fs::write(output, png).map_err(|error| error.to_string())?;
@@ -215,6 +219,35 @@ fn render_media_preview(path: &Path, output: &Path) -> Result<(), String> {
         .success()
         .then_some(())
         .ok_or_else(|| "Unable to normalize media preview".to_owned())
+}
+
+fn render_audio_preview(path: &Path, output: &Path) -> Result<(), String> {
+    let status = Command::new("ffmpeg")
+        .args(["-nostdin", "-v", "error", "-threads", "2", "-i"])
+        .arg(path)
+        .args([
+            "-map",
+            "0:a:0",
+            "-vn",
+            "-sn",
+            "-dn",
+            "-t",
+            "30",
+            "-c:a",
+            "libvorbis",
+            "-q:a",
+            "4",
+            "-f",
+            "ogg",
+            "-y",
+        ])
+        .arg(output)
+        .status()
+        .map_err(|error| error.to_string())?;
+    status
+        .success()
+        .then_some(())
+        .ok_or_else(|| "Unable to normalize audio preview".to_owned())
 }
 
 fn render_media(path: &Path, size: i32) -> Result<Vec<u8>, String> {

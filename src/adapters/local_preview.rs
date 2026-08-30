@@ -63,6 +63,9 @@ impl PreviewProvider for LocalPreviewProvider {
                     Some(ParseOperation::PreviewHeif)
                 }
                 PreviewContent::Image => Some(ParseOperation::PreviewImage),
+                PreviewContent::Media if content_type.starts_with("audio/") => {
+                    Some(ParseOperation::PreviewAudio)
+                }
                 PreviewContent::Media => Some(ParseOperation::PreviewMedia),
                 PreviewContent::Text { .. }
                 | PreviewContent::Rasterized { .. }
@@ -92,7 +95,12 @@ impl PreviewProvider for LocalPreviewProvider {
                             pages: output.pages,
                         }
                     }
-                    Ok(Ok(output)) if operation == ParseOperation::PreviewMedia => {
+                    Ok(Ok(output))
+                        if matches!(
+                            operation,
+                            ParseOperation::PreviewMedia | ParseOperation::PreviewAudio
+                        ) =>
+                    {
                         PreviewContent::SandboxedMedia { data: output.data }
                     }
                     Ok(Ok(output)) => PreviewContent::Rasterized { png: output.data },

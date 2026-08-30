@@ -27,6 +27,7 @@ pub(crate) enum ParseOperation {
     PreviewHeif,
     PreviewPdf,
     PreviewMedia,
+    PreviewAudio,
 }
 
 impl ParseOperation {
@@ -41,12 +42,15 @@ impl ParseOperation {
             Self::PreviewHeif => "preview-heif",
             Self::PreviewPdf => "preview-pdf",
             Self::PreviewMedia => "preview-media",
+            Self::PreviewAudio => "preview-audio",
         }
     }
 
     fn output_name(self) -> &'static str {
         if self == Self::PreviewMedia {
             "result.webm"
+        } else if self == Self::PreviewAudio {
+            "result.ogg"
         } else {
             "result.png"
         }
@@ -128,7 +132,11 @@ pub(crate) fn parse(
         return Err("The preview renderer produced an invalid output size".to_owned());
     }
     let data = fs::read(result_path).map_err(|error| error.to_string())?;
-    if operation != ParseOperation::PreviewMedia && !data.starts_with(b"\x89PNG\r\n\x1a\n") {
+    if !matches!(
+        operation,
+        ParseOperation::PreviewMedia | ParseOperation::PreviewAudio
+    ) && !data.starts_with(b"\x89PNG\r\n\x1a\n")
+    {
         return Err("The preview renderer produced invalid image data".to_owned());
     }
     let (page, pages) = read_metadata(&output.path().join("result.meta"));
