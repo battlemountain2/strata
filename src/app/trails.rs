@@ -3,7 +3,7 @@
 use std::{cell::RefCell, io, rc::Rc};
 
 use crate::{
-    model::{Location, Trail, TrailCollection, TrailId},
+    model::{Location, Trail, TrailCollection, TrailId, TrailViewState},
     services::{StoredTrails, TrailStore},
 };
 
@@ -45,6 +45,14 @@ impl Trails {
             .cloned()
     }
 
+    pub fn active_view(&self) -> Option<TrailViewState> {
+        self.stored
+            .borrow()
+            .collection
+            .active_trail()
+            .map(|trail| trail.view.clone())
+    }
+
     pub fn ensure_default(&self, location: Location) -> io::Result<()> {
         if !self.stored.borrow().collection.trails.is_empty() {
             return Ok(());
@@ -61,32 +69,61 @@ impl Trails {
         self.store.save(&stored)
     }
 
-    pub fn create(&self, name: impl Into<String>, location: Location) -> io::Result<TrailId> {
+    pub fn create(
+        &self,
+        name: impl Into<String>,
+        location: Location,
+        view: TrailViewState,
+    ) -> io::Result<TrailId> {
         let mut stored = self.stored.borrow_mut();
         let id = next_id(&stored.collection);
-        let trail = Trail::new(id.clone(), name, location.breadcrumbs()).ok_or_else(|| {
+        let mut trail = Trail::new(id.clone(), name, location.breadcrumbs()).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidInput, "Trail name cannot be empty")
         })?;
+        trail.view = view;
         stored.collection.active = Some(id.clone());
         stored.collection.trails.push(trail);
         self.store.save(&stored)?;
         Ok(id)
     }
 
-    pub fn activate(&self, id: &TrailId) -> io::Result<Option<Location>> {
+    pub fn activate(&self, id: &TrailId) -> io::Result<Option<Trail>> {
         let mut stored = self.stored.borrow_mut();
-        let location = stored
+        let trail = stored
             .collection
             .trails
             .iter()
             .find(|trail| &trail.id == id)
-            .and_then(Trail::active_location)
             .cloned();
-        if location.is_some() {
+        if trail.is_some() {
             stored.collection.active = Some(id.clone());
             self.store.save(&stored)?;
         }
-        Ok(location)
+        Ok(trail)
+    }
+
+    pub fn cycle(&self, offset: isize) -> io::Result<Option<Trail>> {
+        let stored = self.stored.borrow();
+        if stored.collection.trails.is_empty() {
+            return Ok(None);
+        }
+        let current = stored
+            .collection
+            .active
+            .as_ref()
+            .and_then(|active| {
+                stored
+                    .collection
+                    .trails
+                    .iter()
+                    .position(|trail| &trail.id == active)
+            })
+            .unwrap_or(0);
+        let len = stored.collection.trails.len() as isize;
+        let next = (current as isize + offset).rem_euclid(len) as usize;
+        let id = stored.collection.trails[next].id.clone();
+        drop(stored);
+        self.activate(&id)
     }
 
     pub fn rename(&self, id: &TrailId, name: impl Into<String>) -> io::Result<bool> {
@@ -171,6 +208,24 @@ impl Trails {
             return Ok(());
         }
         trail.locations = locations;
+        self.store.save(&stored)
+    }
+
+    pub fn update_active_view(&self, view: TrailViewState) -> io::Result<()> {
+        let mut stored = self.stored.borrow_mut();
+        let active = stored.collection.active.clone();
+        let Some(trail) = stored
+            .collection
+            .trails
+            .iter_mut()
+            .find(|trail| Some(&trail.id) == active.as_ref())
+        else {
+            return Ok(());
+        };
+        if trail.view == view {
+            return Ok(());
+        }
+        trail.view = view;
         self.store.save(&stored)
     }
 }

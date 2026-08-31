@@ -6,7 +6,7 @@ use gtk::prelude::*;
 
 use crate::{
     app::{Browser, Trails},
-    model::Trail,
+    model::{Trail, TrailViewState},
 };
 
 pub struct TrailSwitcher {
@@ -16,10 +16,17 @@ pub struct TrailSwitcher {
     list: gtk::Box,
     trails: Rc<Trails>,
     browser: Rc<Browser>,
+    capture_view: Rc<dyn Fn() -> TrailViewState>,
+    activate_trail: Rc<dyn Fn(Trail)>,
 }
 
 impl TrailSwitcher {
-    pub fn new(trails: Rc<Trails>, browser: Rc<Browser>) -> Rc<Self> {
+    pub fn new(
+        trails: Rc<Trails>,
+        browser: Rc<Browser>,
+        capture_view: Rc<dyn Fn() -> TrailViewState>,
+        activate_trail: Rc<dyn Fn(Trail)>,
+    ) -> Rc<Self> {
         let title = gtk::Label::new(None);
         title.set_ellipsize(gtk::pango::EllipsizeMode::End);
         title.set_max_width_chars(18);
@@ -46,6 +53,8 @@ impl TrailSwitcher {
             list,
             trails,
             browser,
+            capture_view,
+            activate_trail,
         });
         switcher.refresh();
         switcher
@@ -57,6 +66,15 @@ impl TrailSwitcher {
 
     pub fn popup(&self) {
         self.popover.popup();
+    }
+
+    pub fn cycle(self: &Rc<Self>, offset: isize) {
+        match self.trails.cycle(offset) {
+            Ok(Some(trail)) => (self.activate_trail)(trail),
+            Ok(None) => {}
+            Err(error) => tracing::warn!(%error, "unable to cycle Trails"),
+        }
+        self.refresh();
     }
 
     fn refresh(self: &Rc<Self>) {
@@ -101,7 +119,10 @@ impl TrailSwitcher {
                 return;
             };
             let name = location.display_name();
-            if let Err(error) = switcher.trails.create(name, location) {
+            if let Err(error) = switcher
+                .trails
+                .create(name, location, (switcher.capture_view)())
+            {
                 tracing::warn!(%error, "unable to create Trail");
             }
             switcher.refresh();
@@ -139,7 +160,7 @@ impl TrailSwitcher {
                 return;
             };
             match switcher.trails.activate(&id) {
-                Ok(Some(location)) => switcher.browser.navigate(location),
+                Ok(Some(trail)) => (switcher.activate_trail)(trail),
                 Ok(None) => {}
                 Err(error) => tracing::warn!(%error, "unable to activate Trail"),
             }

@@ -460,6 +460,10 @@ impl BrowserView {
         });
     }
 
+    pub fn density(&self) -> BrowserDensity {
+        self.state.mode_views.borrow().density()
+    }
+
     pub fn activate_focused(&self) {
         if self.view_mode() != BrowserMode::Columns {
             self.state.browser.activate_focused_in_place();

@@ -13,7 +13,10 @@ use gtk::{gio, glib, prelude::*};
 use crate::{
     adapters::{LocalFileSource, LocalOperationProvider, LocalPreviewProvider, LocalTrailStore},
     app::{Browser, BrowserEvent, Trails},
-    model::{EntryKind, FileEntry, Location, MetadataValue},
+    model::{
+        EntryKind, FileEntry, Location, MetadataValue, Trail, TrailBrowserDensity,
+        TrailBrowserMode, TrailViewState,
+    },
 };
 
 use super::{
@@ -50,8 +53,20 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
                 .map(std::path::Path::to_path_buf)
         })
         .unwrap_or_else(home_directory);
+    let had_saved_trail = trails.active_view().is_some();
     if let Err(error) = trails.ensure_default(Location::local(&location)) {
         tracing::warn!(%error, "unable to save initial Trail");
+    }
+    if !had_saved_trail {
+        let initial_view = TrailViewState {
+            browser_mode: trail_browser_mode(theme_manager.browser_mode()),
+            density: trail_browser_density(theme_manager.browser_density()),
+            sidebar_open: true,
+            ..TrailViewState::default()
+        };
+        if let Err(error) = trails.update_active_view(initial_view) {
+            tracing::warn!(%error, "unable to save initial Trail view state");
+        }
     }
     load_styles();
 
@@ -63,11 +78,12 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
         .build();
 
     let browser = BrowserView::new(Rc::new(LocalFileSource), PeekBehavior::default());
-    browser.set_view_mode(theme_manager.browser_mode());
-    browser.set_density(theme_manager.browser_density());
+    let initial_view = trails.active_view().unwrap_or_default();
+    browser.set_view_mode(browser_mode(initial_view.browser_mode));
+    browser.set_density(browser_density(initial_view.density));
     browser.set_operation_provider(Rc::new(LocalOperationProvider));
     let controller = browser.browser();
-    let trail_switcher = TrailSwitcher::new(trails.clone(), controller.clone());
+    controller.set_preferences(initial_view.preferences);
     let preview = PreviewDrawer::new(Rc::new(LocalPreviewProvider));
     let preview_for_selection = preview.clone();
     let weak_controller = Rc::downgrade(&controller);
@@ -107,7 +123,7 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     header.set_show_title_buttons(false);
     header.set_title_widget(Some(&gtk::Box::new(gtk::Orientation::Horizontal, 0)));
     let sidebar_toggle = gtk::ToggleButton::builder()
-        .active(true)
+        .active(initial_view.sidebar_open)
         .tooltip_text("Toggle sidebar")
         .build();
     sidebar_toggle.set_child(Some(&crate::assets::primary_icon(
@@ -115,6 +131,57 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
         20,
     )));
     sidebar_toggle.add_css_class("sidebar-toggle");
+    let captured_browser = browser.clone();
+    let captured_controller = controller.clone();
+    let captured_sidebar = sidebar_toggle.clone();
+    let captured_preview = preview.clone();
+    let capture_view: Rc<dyn Fn() -> TrailViewState> = Rc::new(move || TrailViewState {
+        browser_mode: trail_browser_mode(captured_browser.view_mode()),
+        density: trail_browser_density(captured_browser.density()),
+        preferences: captured_controller
+            .active_depth()
+            .and_then(|depth| captured_controller.column_preferences(depth))
+            .unwrap_or_default(),
+        sidebar_open: captured_sidebar.is_active(),
+        preview_open: captured_preview.is_open(),
+    });
+    let activated_browser = browser.clone();
+    let activated_controller = controller.clone();
+    let activated_sidebar = sidebar_toggle.clone();
+    let activated_preview = preview.clone();
+    let activate_trail: Rc<dyn Fn(Trail)> = Rc::new(move |trail| {
+        activated_browser.set_view_mode(browser_mode(trail.view.browser_mode));
+        activated_browser.set_density(browser_density(trail.view.density));
+        activated_controller.set_preferences(trail.view.preferences);
+        activated_sidebar.set_active(trail.view.sidebar_open);
+        if !trail.view.preview_open {
+            activated_preview.close();
+        }
+        if let Some(location) = trail.active_location() {
+            activated_controller.navigate(location.clone());
+        }
+    });
+    let trail_switcher = TrailSwitcher::new(
+        trails.clone(),
+        controller.clone(),
+        capture_view.clone(),
+        activate_trail,
+    );
+    let context_trails = trails.clone();
+    let context_view = capture_view.clone();
+    controller.observe(move |event| {
+        if matches!(
+            event,
+            BrowserEvent::ColumnAdded { .. }
+                | BrowserEvent::ColumnsTruncated { .. }
+                | BrowserEvent::SortingFinished { .. }
+                | BrowserEvent::PreviewRequested { .. }
+                | BrowserEvent::FocusChanged { .. }
+        ) && let Err(error) = context_trails.update_active_view(context_view())
+        {
+            tracing::warn!(%error, "unable to save Trail view state");
+        }
+    });
     header.pack_start(&sidebar_toggle);
     header.pack_start(&trail_switcher.widget());
     header.pack_start(&browser.location_widget());
@@ -126,7 +193,13 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
         20,
     )));
     search_button.add_css_class("header-action");
-    let appearance = build_appearance_menu(&browser, &controller, theme_manager.clone());
+    let appearance = build_appearance_menu(
+        &browser,
+        &controller,
+        theme_manager.clone(),
+        trails.clone(),
+        capture_view.clone(),
+    );
     let settings = gtk::Button::builder().tooltip_text("Settings").build();
     settings.set_child(Some(&crate::assets::text_icon(
         crate::assets::icons::SETTINGS,
@@ -180,6 +253,8 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     });
     let animated_content = content.clone();
     let animated_sidebar = sidebar.widget.clone();
+    let sidebar_trails = trails.clone();
+    let sidebar_view = capture_view.clone();
     sidebar_toggle.connect_toggled(move |toggle| {
         animate_sidebar(
             &animated_content,
@@ -188,6 +263,9 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
             &sidebar_animating,
             toggle.is_active(),
         );
+        if let Err(error) = sidebar_trails.update_active_view(sidebar_view()) {
+            tracing::warn!(%error, "unable to save Trail sidebar state");
+        }
     });
     let preview_split = gtk::Paned::new(gtk::Orientation::Horizontal);
     preview_split.add_css_class("preview-split");
@@ -308,6 +386,14 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     let trail_shortcut = gtk::EventControllerKey::new();
     let shortcut_switcher = trail_switcher.clone();
     trail_shortcut.connect_key_pressed(move |_, key, _, modifiers| {
+        if key == gtk::gdk::Key::Tab && modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
+            shortcut_switcher.cycle(if modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) {
+                -1
+            } else {
+                1
+            });
+            return glib::Propagation::Stop;
+        }
         if !matches!(key, gtk::gdk::Key::t | gtk::gdk::Key::T)
             || !modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK)
             || !modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK)
@@ -320,7 +406,15 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     window.add_controller(trail_shortcut);
     window.set_child(Some(&window_overlay));
     install_modal_focus_trap(&window);
-    install_keyboard_navigation(&window, &browser, &sidebar_toggle, &preview);
+    install_keyboard_navigation(
+        &window,
+        &browser,
+        &sidebar_toggle,
+        &preview,
+        trails.clone(),
+        capture_view,
+    );
+    install_mouse_navigation(&window, &controller);
     browser.navigate(location);
 
     let browser_controller = browser.browser();
@@ -330,6 +424,63 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     });
     window.present();
     crate::metrics::mark_window_presented();
+}
+
+fn install_mouse_navigation(window: &gtk::ApplicationWindow, browser: &Rc<Browser>) {
+    let buttons = gtk::GestureClick::new();
+    buttons.set_button(0);
+    buttons.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let weak_browser = Rc::downgrade(browser);
+    buttons.connect_pressed(move |gesture, _, _, _| {
+        let Some(browser) = weak_browser.upgrade() else {
+            return;
+        };
+        match mouse_navigation_delta(gesture.current_button()) {
+            Some(-1) => browser.back(),
+            Some(1) => browser.forward(),
+            _ => return,
+        }
+        let _claimed = gesture.set_state(gtk::EventSequenceState::Claimed);
+    });
+    window.add_controller(buttons);
+}
+
+fn mouse_navigation_delta(button: u32) -> Option<i8> {
+    match button {
+        8 => Some(-1),
+        9 => Some(1),
+        _ => None,
+    }
+}
+
+fn trail_browser_mode(mode: BrowserMode) -> TrailBrowserMode {
+    match mode {
+        BrowserMode::Columns => TrailBrowserMode::Columns,
+        BrowserMode::Grid => TrailBrowserMode::Grid,
+        BrowserMode::Explorer => TrailBrowserMode::Explorer,
+    }
+}
+
+fn browser_mode(mode: TrailBrowserMode) -> BrowserMode {
+    match mode {
+        TrailBrowserMode::Columns => BrowserMode::Columns,
+        TrailBrowserMode::Grid => BrowserMode::Grid,
+        TrailBrowserMode::Explorer => BrowserMode::Explorer,
+    }
+}
+
+fn trail_browser_density(density: BrowserDensity) -> TrailBrowserDensity {
+    match density {
+        BrowserDensity::Compact => TrailBrowserDensity::Compact,
+        BrowserDensity::Airy => TrailBrowserDensity::Airy,
+    }
+}
+
+fn browser_density(density: TrailBrowserDensity) -> BrowserDensity {
+    match density {
+        TrailBrowserDensity::Compact => BrowserDensity::Compact,
+        TrailBrowserDensity::Airy => BrowserDensity::Airy,
+    }
 }
 
 fn animate_sidebar(
@@ -392,6 +543,8 @@ fn install_keyboard_navigation(
     view: &BrowserView,
     sidebar_toggle: &gtk::ToggleButton,
     preview: &PreviewDrawer,
+    trails: Rc<Trails>,
+    capture_view: Rc<dyn Fn() -> TrailViewState>,
 ) {
     let keys = gtk::EventControllerKey::new();
     keys.set_propagation_phase(gtk::PropagationPhase::Capture);
@@ -517,6 +670,9 @@ fn install_keyboard_navigation(
         }
         if key == gtk::gdk::Key::Escape && preview.is_open() {
             preview.close();
+            if let Err(error) = trails.update_active_view(capture_view()) {
+                tracing::warn!(%error, "unable to save Trail preview state");
+            }
             return glib::Propagation::Stop;
         }
         if view.filter_has_focus() && !control && !alt {
@@ -589,6 +745,8 @@ fn build_appearance_menu(
     view: &BrowserView,
     controller: &Rc<Browser>,
     preferences: Rc<super::theme::ThemeManager>,
+    trails: Rc<Trails>,
+    capture_view: Rc<dyn Fn() -> TrailViewState>,
 ) -> gtk::MenuButton {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
     content.add_css_class("appearance-menu");
@@ -622,12 +780,17 @@ fn build_appearance_menu(
         let grid_check = grid_check.clone();
         let explorer_check = explorer_check.clone();
         let preferences = preferences.clone();
+        let trails = trails.clone();
+        let capture_view = capture_view.clone();
         button.connect_clicked(move |_| {
             view.set_view_mode(mode);
             preferences.set_browser_mode(mode);
             list_check.set_visible(mode == BrowserMode::Columns);
             grid_check.set_visible(mode == BrowserMode::Grid);
             explorer_check.set_visible(mode == BrowserMode::Explorer);
+            if let Err(error) = trails.update_active_view(capture_view()) {
+                tracing::warn!(%error, "unable to save Trail view mode");
+            }
         });
     }
     content.append(&list);
@@ -654,20 +817,30 @@ fn build_appearance_menu(
         let compact_check = compact_check.clone();
         let airy_check = airy_check.clone();
         let preferences = preferences.clone();
+        let trails = trails.clone();
+        let capture_view = capture_view.clone();
         compact.connect_clicked(move |_| {
             view.set_density(BrowserDensity::Compact);
             preferences.set_browser_density(BrowserDensity::Compact);
             compact_check.set_visible(true);
             airy_check.set_visible(false);
+            if let Err(error) = trails.update_active_view(capture_view()) {
+                tracing::warn!(%error, "unable to save Trail density");
+            }
         });
     }
     {
         let view = view.clone();
+        let trails = trails.clone();
+        let capture_view = capture_view.clone();
         airy.connect_clicked(move |_| {
             view.set_density(BrowserDensity::Airy);
             preferences.set_browser_density(BrowserDensity::Airy);
             compact_check.set_visible(false);
             airy_check.set_visible(true);
+            if let Err(error) = trails.update_active_view(capture_view()) {
+                tracing::warn!(%error, "unable to save Trail density");
+            }
         });
     }
     content.append(&compact);
@@ -678,6 +851,8 @@ fn build_appearance_menu(
         appearance_option(crate::assets::icons::EYE_OFF, "Hidden files", false, true);
     let hidden_state = Rc::new(Cell::new(false));
     let weak_controller = Rc::downgrade(controller);
+    let hidden_trails = trails.clone();
+    let hidden_view = capture_view.clone();
     hidden.connect_clicked(move |_| {
         let shown = !hidden_state.get();
         hidden_state.set(shown);
@@ -692,6 +867,9 @@ fn build_appearance_menu(
         );
         if let Some(controller) = weak_controller.upgrade() {
             controller.toggle_hidden();
+            if let Err(error) = hidden_trails.update_active_view(hidden_view()) {
+                tracing::warn!(%error, "unable to save Trail hidden-file state");
+            }
         }
     });
     content.append(&hidden);

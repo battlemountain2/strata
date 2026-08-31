@@ -178,6 +178,10 @@ impl ModeViews {
         self.mode
     }
 
+    pub fn density(&self) -> BrowserDensity {
+        self.density
+    }
+
     pub fn selected_positions(&self) -> Option<(usize, Vec<usize>)> {
         let pane = match self.mode {
             BrowserMode::Columns => return None,

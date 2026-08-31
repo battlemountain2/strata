@@ -506,6 +506,11 @@ impl Browser {
         self.state.borrow().column_preferences(depth)
     }
 
+    pub fn set_preferences(&self, preferences: ViewPreferences) {
+        self.preferences.set(preferences);
+        self.state.borrow_mut().set_preferences(preferences);
+    }
+
     pub fn column_snapshot(&self, depth: usize) -> Option<BrowserColumnSnapshot> {
         let state = self.state.borrow();
         let column = state.columns.get(depth)?;

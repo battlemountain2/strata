@@ -163,7 +163,10 @@ pub struct ViewPreferences {
 
 mod trail;
 
-pub use trail::{Trail, TrailCollection, TrailId};
+pub use trail::{
+    BrowserDensity as TrailBrowserDensity, BrowserMode as TrailBrowserMode, Trail, TrailCollection,
+    TrailId, TrailViewState,
+};
 
 impl Default for ViewPreferences {
     fn default() -> Self {

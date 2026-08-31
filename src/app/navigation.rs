@@ -360,6 +360,13 @@ impl NavigationState {
         }
     }
 
+    pub fn set_preferences(&mut self, preferences: ViewPreferences) {
+        self.preferences = preferences;
+        for column in &mut self.columns {
+            column.preferences = preferences;
+        }
+    }
+
     pub fn column_preferences(&self, depth: usize) -> Option<ViewPreferences> {
         self.columns.get(depth).map(|column| column.preferences)
     }
