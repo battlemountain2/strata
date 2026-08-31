@@ -53,7 +53,9 @@ fn render_pixbuf(path: &Path, size: i32) -> Result<Vec<u8>, String> {
 }
 
 fn render_image(path: &Path, size: i32) -> Result<Vec<u8>, String> {
-    render_pixbuf(path, size).or_else(|_| render_imagemagick(path, size))
+    // Prefer the bounded external decoder while glycin can inherit Strata's file-size limit and
+    // receive SIGXFSZ when allocating shared memory for large decoded JPEG pixel buffers.
+    render_imagemagick(path, size).or_else(|_| render_pixbuf(path, size))
 }
 
 fn render_raw(path: &Path, size: i32) -> Result<Vec<u8>, String> {
