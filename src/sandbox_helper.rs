@@ -223,16 +223,34 @@ fn render_media_preview(path: &Path, output: &Path) -> Result<(), String> {
 
 fn render_audio_preview(path: &Path, output: &Path) -> Result<(), String> {
     let status = Command::new("ffmpeg")
-        .args(["-nostdin", "-v", "error", "-threads", "2", "-i"])
+        .args([
+            "-nostdin",
+            "-v",
+            "error",
+            "-threads",
+            "2",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=640x360:r=1",
+            "-i",
+        ])
         .arg(path)
         .args([
             "-map",
-            "0:a:0",
-            "-vn",
+            "0:v:0",
+            "-map",
+            "1:a:0",
             "-sn",
             "-dn",
             "-t",
             "30",
+            "-c:v",
+            "libtheora",
+            "-pix_fmt",
+            "yuv420p",
+            "-r",
+            "1",
             "-c:a",
             "libvorbis",
             "-q:a",
