@@ -58,7 +58,7 @@ Strata is not yet available through Arch's package repositories. Download the ar
 Install the runtime libraries and optional video preview tools on Arch or Omarchy:
 
 ```bash
-sudo pacman -S --needed bubblewrap ffmpeg ffmpegthumbnailer fontconfig gtk4 gtksourceview5 poppler-glib
+sudo pacman -S --needed bubblewrap ffmpeg ffmpegthumbnailer fontconfig gst-plugins-good gtk4 gtksourceview5 poppler-glib
 ```
 
 Then verify, extract, and install the downloaded archive (replace the filename with the release you downloaded). The `gh attestation` check verifies the archive's signed GitHub Actions provenance:
@@ -74,6 +74,10 @@ install -Dm755 strata-<version>-<target>/strata ~/.local/bin/strata
 Each archive also contains `SOURCE_COMMIT`, which records the exact commit used for the build.
 
 Ensure `~/.local/bin` is on `PATH`, then run `strata`. Image thumbnails work without `ffmpegthumbnailer`; when `ffmpegthumbnailer` or `ffmpeg` is unavailable, video files fall back to their video icon or an unavailable preview. Bubblewrap is required: preview parsing fails closed rather than running untrusted native parsers without a sandbox. See [Preview sandbox](docs/preview-sandbox.md) for the providers, permissions, and resource limits.
+
+Media playback requires the GStreamer auto-detection elements provided by
+`gst-plugins-good`. Without them, GTK cannot select an audio output and media
+previews remain at `0:00`.
 
 FLAC files with embedded cover art display album thumbnails when `ffmpegthumbnailer` is installed.
 The preview drawer can play the first 30 seconds through the sandboxed `ffmpeg` media pipeline.
