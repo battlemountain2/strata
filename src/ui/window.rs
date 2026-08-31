@@ -12,9 +12,8 @@ use gtk::{gio, glib, prelude::*};
 
 use crate::{
     adapters::{LocalFileSource, LocalOperationProvider, LocalPreviewProvider, LocalTrailStore},
-    app::{Browser, BrowserEvent},
-    model::{EntryKind, FileEntry, Location, MetadataValue, Trail, TrailId},
-    services::{StoredTrails, TrailStore},
+    app::{Browser, BrowserEvent, Trails},
+    model::{EntryKind, FileEntry, Location, MetadataValue},
 };
 
 use super::{
@@ -24,6 +23,7 @@ use super::{
     motion::{animations_enabled, emphasized_deceleration},
     preview::PreviewDrawer,
     search::SearchDialog,
+    trails::TrailSwitcher,
 };
 
 const SIDEBAR_WIDTH: i32 = 208;
@@ -38,35 +38,21 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     crate::assets::register_icon_theme();
     let theme_manager = super::theme::ThemeManager::shared();
     let trail_store = Rc::new(LocalTrailStore::xdg());
-    let mut stored_trails = trail_store.load().unwrap_or_else(|error| {
+    let trails = Trails::load(trail_store.clone()).unwrap_or_else(|error| {
         tracing::warn!(%error, "unable to load saved Trails");
-        StoredTrails::default()
+        Trails::empty(trail_store.clone())
     });
     let location = location
         .or_else(|| {
-            stored_trails
-                .collection
-                .active_trail()
-                .and_then(Trail::active_location)
-                .and_then(Location::native_path)
+            trails
+                .active_location()?
+                .native_path()
                 .map(std::path::Path::to_path_buf)
         })
         .unwrap_or_else(home_directory);
-    if stored_trails.collection.trails.is_empty() {
-        let active = Location::local(&location);
-        if let Some(trail) = Trail::new(
-            TrailId::new("default").expect("static Trail identifier is valid"),
-            active.display_name(),
-            active.breadcrumbs(),
-        ) {
-            stored_trails.collection.active = Some(trail.id.clone());
-            stored_trails.collection.trails.push(trail);
-            if let Err(error) = trail_store.save(&stored_trails) {
-                tracing::warn!(%error, "unable to save initial Trail");
-            }
-        }
+    if let Err(error) = trails.ensure_default(Location::local(&location)) {
+        tracing::warn!(%error, "unable to save initial Trail");
     }
-    let stored_trails = Rc::new(RefCell::new(stored_trails));
     load_styles();
 
     let window = gtk::ApplicationWindow::builder()
@@ -81,11 +67,11 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     browser.set_density(theme_manager.browser_density());
     browser.set_operation_provider(Rc::new(LocalOperationProvider));
     let controller = browser.browser();
+    let trail_switcher = TrailSwitcher::new(trails.clone(), controller.clone());
     let preview = PreviewDrawer::new(Rc::new(LocalPreviewProvider));
     let preview_for_selection = preview.clone();
     let weak_controller = Rc::downgrade(&controller);
-    let observed_trail_store = trail_store.clone();
-    let observed_trails = stored_trails.clone();
+    let observed_trails = trails.clone();
     controller.observe(move |event| match event {
         BrowserEvent::ColumnAdded { .. } | BrowserEvent::ColumnsTruncated { .. } => {
             let Some(browser) = weak_controller.upgrade() else {
@@ -94,18 +80,7 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
             let Some(active_location) = browser.active_location() else {
                 return;
             };
-            let mut stored = observed_trails.borrow_mut();
-            let active_id = stored.collection.active.clone();
-            let Some(trail) = stored
-                .collection
-                .trails
-                .iter_mut()
-                .find(|trail| Some(&trail.id) == active_id.as_ref())
-            else {
-                return;
-            };
-            trail.locations = active_location.breadcrumbs();
-            if let Err(error) = observed_trail_store.save(&stored) {
+            if let Err(error) = observed_trails.update_active_location(active_location) {
                 tracing::warn!(%error, "unable to save active Trail");
             }
         }
@@ -141,6 +116,7 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     )));
     sidebar_toggle.add_css_class("sidebar-toggle");
     header.pack_start(&sidebar_toggle);
+    header.pack_start(&trail_switcher.widget());
     header.pack_start(&browser.location_widget());
     let search_button = gtk::Button::builder()
         .tooltip_text("Search (Ctrl+K)")
@@ -329,6 +305,19 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
         glib::Propagation::Stop
     });
     window.add_controller(settings_shortcut);
+    let trail_shortcut = gtk::EventControllerKey::new();
+    let shortcut_switcher = trail_switcher.clone();
+    trail_shortcut.connect_key_pressed(move |_, key, _, modifiers| {
+        if !matches!(key, gtk::gdk::Key::t | gtk::gdk::Key::T)
+            || !modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK)
+            || !modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK)
+        {
+            return glib::Propagation::Proceed;
+        }
+        shortcut_switcher.popup();
+        glib::Propagation::Stop
+    });
+    window.add_controller(trail_shortcut);
     window.set_child(Some(&window_overlay));
     install_modal_focus_trap(&window);
     install_keyboard_navigation(&window, &browser, &sidebar_toggle, &preview);

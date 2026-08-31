@@ -9,6 +9,7 @@ mod search;
 mod settings;
 mod theme;
 mod thumbnail;
+mod trails;
 mod window;
 
 pub use window::{present, present_location};

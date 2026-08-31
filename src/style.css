@@ -99,6 +99,109 @@ headerbar menubutton.header-action > button:focus-visible image {
   opacity: 1;
 }
 
+headerbar menubutton.trail-switcher-button > button {
+  min-height: 30px;
+  min-width: 0;
+  padding: 0 10px;
+  margin: 0 4px;
+  border-radius: 7px;
+  color: @theme_dim_text;
+  background: transparent;
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+headerbar menubutton.trail-switcher-button > button:hover,
+headerbar menubutton.trail-switcher-button > button:checked,
+headerbar menubutton.trail-switcher-button > button:focus-visible {
+  color: @theme_text;
+  background: alpha(@theme_muted, 0.62);
+  border-color: alpha(@theme_border, 0.7);
+}
+
+.trail-switcher-popover contents {
+  min-width: 330px;
+  padding: 8px;
+  border-radius: 10px;
+  color: @theme_text;
+  background: @theme_surface;
+  border: 1px solid alpha(@theme_border, 0.8);
+}
+
+.trail-switcher-list {
+  padding: 2px;
+}
+
+.trail-switcher-heading {
+  padding: 6px 8px 7px;
+  color: @theme_dim_text;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.trail-row {
+  min-height: 34px;
+  padding: 2px;
+  border-radius: 7px;
+}
+
+.trail-row.active {
+  background: alpha(@theme_accent, 0.12);
+}
+
+.trail-select,
+.trail-row-action,
+.trail-create {
+  color: @theme_text;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.trail-select {
+  padding: 4px 8px;
+}
+
+.trail-select label {
+  text-align: left;
+}
+
+.trail-row-action {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 6px;
+}
+
+.trail-row-action:hover,
+.trail-row-action.active,
+.trail-create:hover {
+  color: @theme_accent;
+  background: alpha(@theme_muted, 0.72);
+}
+
+.trail-row-action:disabled {
+  color: alpha(@theme_dim_text, 0.45);
+}
+
+.trail-rename {
+  min-height: 28px;
+  padding: 0 7px;
+  color: @theme_text;
+  caret-color: @theme_accent;
+  background: @theme_bg;
+  border: 1px solid @theme_accent;
+  border-radius: 6px;
+}
+
+.trail-create {
+  margin-top: 5px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  color: @theme_dim_text;
+}
+
 .appearance-popover contents {
   background: @theme_surface;
   border: 1px solid alpha(@theme_accent, 0.22);
