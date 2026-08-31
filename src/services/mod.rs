@@ -4,6 +4,7 @@ mod file_source;
 mod operations;
 mod preview;
 mod search;
+mod trails;
 
 pub use file_source::{
     DirectoryChange, DirectoryEvent, DirectoryRequest, FileSource, LoadHandle,
@@ -18,3 +19,4 @@ pub use preview::{
 };
 pub(crate) use preview::{content_family, has_plain_text_extension};
 pub(crate) use search::{SearchEvent, SearchHandle, SearchItem, index_tree};
+pub use trails::{StoredTrails, TRAIL_SCHEMA_VERSION, TrailStore};

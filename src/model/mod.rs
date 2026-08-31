@@ -2,16 +2,46 @@
 
 use std::{cmp::Ordering, ffi::OsString, path::PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 /// A browsable destination. Native paths remain byte-safe and URI locations remain explicit.
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 enum LocationKind {
+    #[serde(with = "native_path")]
     Native(PathBuf),
     Uri(String),
 }
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub struct Location {
+    #[serde(flatten)]
     kind: LocationKind,
+}
+
+#[cfg(unix)]
+mod native_path {
+    use std::{
+        ffi::OsString,
+        os::unix::ffi::OsStringExt,
+        path::{Path, PathBuf},
+    };
+
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(path: &Path, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        path.as_os_str().as_encoded_bytes().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Vec::<u8>::deserialize(deserializer).map(|bytes| PathBuf::from(OsString::from_vec(bytes)))
+    }
 }
 
 impl Location {
@@ -106,7 +136,8 @@ impl Location {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SortKey {
     Name,
     Type,
@@ -114,19 +145,25 @@ pub enum SortKey {
     Modified,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SortDirection {
     Ascending,
     Descending,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default)]
 pub struct ViewPreferences {
     pub show_hidden: bool,
     pub folders_first: bool,
     pub sort_key: SortKey,
     pub sort_direction: SortDirection,
 }
+
+mod trail;
+
+pub use trail::{Trail, TrailCollection, TrailId};
 
 impl Default for ViewPreferences {
     fn default() -> Self {
