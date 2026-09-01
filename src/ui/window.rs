@@ -1242,6 +1242,10 @@ impl SidebarState {
         self.widget.append(&heading);
     }
 
+    #[expect(
+        deprecated,
+        reason = "GTK 4.10 dialog replacement is unavailable in the supported runtime"
+    )]
     fn append_volume(&self, volume: gio::Volume) {
         let name = volume.name().to_string();
         let row = sidebar_button(crate::assets::icons::HARD_DRIVE, &name);
@@ -1331,21 +1335,39 @@ impl SidebarState {
                 } else {
                     "Unmount drive?"
                 };
-                let dialog = gtk::AlertDialog::builder()
+                let dialog = gtk::Dialog::builder()
+                    .transient_for(&window)
                     .modal(true)
-                    .message(title)
-                    .detail(format!(
-                        "{} will be disconnected from Strata.",
-                        volume_action.name()
-                    ))
+                    .title(title)
                     .build();
+                dialog.add_css_class("drive-confirm-dialog");
+                let content = dialog.content_area();
+                content.add_css_class("drive-confirm-content");
+                let message = gtk::Label::new(Some(&format!(
+                    "{} will be disconnected from Strata.",
+                    volume_action.name()
+                )));
+                message.set_wrap(true);
+                message.set_xalign(0.0);
+                content.append(&message);
+                dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+                let confirm = dialog.add_button(
+                    if can_eject { "Eject" } else { "Unmount" },
+                    gtk::ResponseType::Accept,
+                );
+                confirm.add_css_class("suggested-action");
                 let volume = volume_action.clone();
                 let operation = operation.clone();
                 let dialog_window = window.clone();
-                dialog.choose(Some(&window), None::<&gio::Cancellable>, move |result| {
-                    if result != Ok(0) {
+                dialog.connect_response(move |dialog, response| {
+                    if response != gtk::ResponseType::Accept {
+                        dialog.close();
                         return;
                     }
+                    dialog.close();
+                    let volume = volume.clone();
+                    let operation = operation.clone();
+                    let dialog_window = dialog_window.clone();
                     glib::MainContext::default().spawn_local(async move {
                         let result = if can_eject {
                             if volume.can_eject() {
@@ -1385,6 +1407,7 @@ impl SidebarState {
                         }
                     });
                 });
+                dialog.present();
             });
             let context = gtk::GestureClick::new();
             context.set_button(3);

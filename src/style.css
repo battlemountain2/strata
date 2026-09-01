@@ -1572,6 +1572,24 @@ menubutton.column-header-action > button:focus-visible image {
   padding: 0;
 }
 
+.drive-confirm-dialog {
+  background: @theme_surface;
+  border: 1px solid alpha(@theme_accent, 0.42);
+  border-radius: 8px;
+  box-shadow: 0 18px 54px alpha(@theme_bg, 0.78);
+  color: @theme_text;
+  min-width: 360px;
+}
+
+.drive-confirm-content {
+  padding: 18px 20px 10px;
+}
+
+.drive-confirm-dialog action-area {
+  border-top: 1px solid alpha(@theme_border, 0.3);
+  padding: 10px 14px;
+}
+
 .folder-context-menu {
   min-width: 230px;
   padding: 7px;
