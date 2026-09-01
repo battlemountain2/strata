@@ -2,6 +2,19 @@
 
 The roadmap is ordered by risk and dependency rather than by visual prominence. Each milestone should leave Strata usable and measurable.
 
+## Hermes direction
+
+Strata is evolving toward a personal, local-first file manager named Hermes. The
+default experience stays clean and Miller-column based while advanced features
+remain opt-in. The next private workstream prioritizes dependable everyday file
+operations, a richer sandboxed preview registry, recursive and content search,
+and reveal-in-context navigation.
+
+Dual-pane browsing, the integrated terminal, and remote providers are deferred
+until the local workflow is complete. A folder tree will be an optional setting,
+and archive/custom actions will remain optional integrations rather than core
+dependencies.
+
 ## Milestone 0 — Foundation
 
 **Goal:** Replace the proof of concept with boundaries that can support the product without premature abstraction.
