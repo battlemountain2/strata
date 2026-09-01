@@ -3828,6 +3828,10 @@ pub(super) fn install_folder_context_menu(
 pub(super) type ContextPickPosition = Rc<dyn Fn(&gtk::Widget) -> Option<u32>>;
 pub(super) type ContextSourcePosition = Rc<dyn Fn(u32) -> Option<usize>>;
 
+#[expect(
+    deprecated,
+    reason = "GTK 4.10 app chooser replacement is not available in the supported runtime"
+)]
 pub(super) fn install_item_context_menu(
     state: &Rc<ViewState>,
     widget: &gtk::Widget,
@@ -3860,6 +3864,7 @@ pub(super) fn install_item_context_menu(
 
     let single = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let open = item_context_option(crate::assets::icons::EXTERNAL_LINK, "Open", "↵");
+    let open_with = item_context_option(crate::assets::icons::EXTERNAL_LINK, "Open With…", "");
     let preview = item_context_option(crate::assets::icons::EYE, "Quick preview", "Space");
     let restore = item_context_option(crate::assets::icons::FOLDER, "Restore", "");
     restore.set_visible(in_trash);
@@ -3879,6 +3884,7 @@ pub(super) fn install_item_context_menu(
     move_to_trash.add_css_class("danger");
     let properties = item_context_option(crate::assets::icons::INFO, "Properties", "Alt+Enter");
     single.append(&open);
+    single.append(&open_with);
     single.append(&preview);
     single.append(&restore);
     single.append(&pin);
@@ -3941,6 +3947,44 @@ pub(super) fn install_item_context_menu(
                 state.browser.activate_in_place(depth, position);
             }
         }
+    });
+    let open_with_target = target.clone();
+    let open_with_popover = popover.downgrade();
+    let chooser_parent = widget.root().and_downcast::<gtk::Window>();
+    open_with.connect_clicked(move |_| {
+        if let Some(popover) = open_with_popover.upgrade() {
+            popover.popdown();
+        }
+        let Some((_, entry)) = open_with_target.borrow().clone() else {
+            return;
+        };
+        let Some(path) = entry.location.native_path() else {
+            return;
+        };
+        let file = gio::File::for_path(path);
+        let content_type = gio::content_type_guess(Some(path), None::<&[u8]>).0;
+        let Some(window) = chooser_parent.clone() else {
+            return;
+        };
+        let dialog = gtk::AppChooserDialog::new(Some(&window), gtk::DialogFlags::MODAL, &file);
+        dialog.set_title(Some("Open With"));
+        let dialog_file = file.clone();
+        dialog.connect_response(move |dialog, response| {
+            if response == gtk::ResponseType::Accept
+                && let Some(app) = dialog.app_info()
+                && let Err(error) = app.launch(
+                    std::slice::from_ref(&dialog_file),
+                    None::<&gio::AppLaunchContext>,
+                )
+            {
+                tracing::warn!(%error, "unable to launch selected application");
+            }
+            dialog.close();
+        });
+        if gio::AppInfo::all_for_type(&content_type).is_empty() {
+            dialog.set_heading("No applications can open this file");
+        }
+        dialog.present();
     });
     let weak = Rc::downgrade(state);
     let preview_target = target.clone();
