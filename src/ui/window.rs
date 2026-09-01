@@ -1329,7 +1329,6 @@ impl SidebarState {
                 let Some(window) = row_action.root().and_downcast::<gtk::Window>() else {
                     return;
                 };
-                let operation = gtk::MountOperation::new(Some(&window));
                 let title = if can_eject {
                     "Eject drive?"
                 } else {
@@ -1357,7 +1356,6 @@ impl SidebarState {
                 );
                 confirm.add_css_class("suggested-action");
                 let volume = volume_action.clone();
-                let operation = operation.clone();
                 let dialog_window = window.clone();
                 dialog.connect_response(move |dialog, response| {
                     if response != gtk::ResponseType::Accept {
@@ -1366,7 +1364,6 @@ impl SidebarState {
                     }
                     dialog.close();
                     let volume = volume.clone();
-                    let operation = operation.clone();
                     let dialog_window = dialog_window.clone();
                     glib::MainContext::default().spawn_local(async move {
                         let result = if can_eject {
@@ -1374,14 +1371,14 @@ impl SidebarState {
                                 volume
                                     .eject_with_operation_future(
                                         gio::MountUnmountFlags::NONE,
-                                        Some(&operation),
+                                        None::<&gio::MountOperation>,
                                     )
                                     .await
                             } else if let Some(mount) = volume.get_mount() {
                                 mount
                                     .eject_with_operation_future(
                                         gio::MountUnmountFlags::NONE,
-                                        Some(&operation),
+                                        None::<&gio::MountOperation>,
                                     )
                                     .await
                             } else {
@@ -1391,7 +1388,7 @@ impl SidebarState {
                             mount
                                 .unmount_with_operation_future(
                                     gio::MountUnmountFlags::NONE,
-                                    Some(&operation),
+                                    None::<&gio::MountOperation>,
                                 )
                                 .await
                         } else {
