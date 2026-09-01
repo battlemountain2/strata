@@ -113,7 +113,7 @@ headerbar menubutton.header-action > button:focus-visible image {
   min-width: 128px;
   min-height: 31px;
   padding: 0 3px 0 5px;
-  border-radius: 7px 7px 0 0;
+  border-radius: 0;
   color: @theme_dim_text;
   background: alpha(@theme_muted, 0.3);
   border: 1px solid transparent;
