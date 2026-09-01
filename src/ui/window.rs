@@ -976,22 +976,27 @@ impl SidebarState {
         }
         self.place_rows.borrow_mut().clear();
 
-        self.append_place(
-            crate::assets::icons::HOME,
-            "Home",
-            Location::local(home_directory()),
-        );
-        self.append_trash_place();
-        self.append_separator();
-
         for place in self.place_order.borrow().clone() {
-            if let Some((icon, name, directory)) = standard_place(place)
-                && let Some(path) = glib::user_special_dir(directory)
-                    .filter(|path| should_show_standard_place(place, path, &home_directory()))
-            {
-                self.append_reorderable_place(place, icon, name, Location::local(path));
+            match place {
+                "home" => self.append_reorderable_place(
+                    "home",
+                    crate::assets::icons::HOME,
+                    "Home",
+                    Location::local(home_directory()),
+                ),
+                "trash" => self.append_trash_place(),
+                id => {
+                    if let Some((icon, name, directory)) = standard_place(id)
+                        && let Some(path) = glib::user_special_dir(directory)
+                            .filter(|path| should_show_standard_place(id, path, &home_directory()))
+                    {
+                        self.append_reorderable_place(id, icon, name, Location::local(path));
+                    }
+                }
             }
         }
+
+        self.append_separator();
 
         let pinned = self
             .pinned_places
@@ -1082,6 +1087,8 @@ impl SidebarState {
     fn append_trash_place(self: &Rc<Self>) {
         let location = Location::uri("trash:///");
         let row = sidebar_button(crate::assets::icons::TRASH, "Trash");
+        row.add_css_class("reorderable");
+        row.set_cursor_from_name(Some("grab"));
         row.set_tooltip_text(Some("trash:///"));
         self.place_rows
             .borrow_mut()
@@ -1144,33 +1151,11 @@ impl SidebarState {
             popover.popup();
         });
         row.add_controller(context);
+        self.install_reorder_controllers(&row, "trash");
         self.widget.append(&row);
     }
 
-    fn append_reorderable_place(
-        self: &Rc<Self>,
-        id: &'static str,
-        icon: &str,
-        name: &str,
-        location: Location,
-    ) {
-        let row = sidebar_button(icon, name);
-        row.add_css_class("reorderable");
-        row.set_cursor_from_name(Some("grab"));
-        row.set_tooltip_text(Some(&location.display_path()));
-        self.place_rows
-            .borrow_mut()
-            .push((location.clone(), row.clone()));
-        let weak_browser = Rc::downgrade(&self.browser);
-        let sidebar = self.widget.clone();
-        let selected_row = row.clone();
-        row.connect_clicked(move |_| {
-            select_sidebar_row(&sidebar, &selected_row);
-            if let Some(browser) = weak_browser.upgrade() {
-                browser.navigate(location.clone());
-            }
-        });
-
+    fn install_reorder_controllers(self: &Rc<Self>, row: &gtk::Button, id: &'static str) {
         let drag = gtk::DragSource::builder()
             .actions(gtk::gdk::DragAction::MOVE)
             .build();
@@ -1206,12 +1191,40 @@ impl SidebarState {
             false
         });
         row.add_controller(drop);
+    }
+
+    fn append_reorderable_place(
+        self: &Rc<Self>,
+        id: &'static str,
+        icon: &str,
+        name: &str,
+        location: Location,
+    ) {
+        let row = sidebar_button(icon, name);
+        row.add_css_class("reorderable");
+        row.set_cursor_from_name(Some("grab"));
+        row.set_tooltip_text(Some(&location.display_path()));
+        self.place_rows
+            .borrow_mut()
+            .push((location.clone(), row.clone()));
+        let weak_browser = Rc::downgrade(&self.browser);
+        let sidebar = self.widget.clone();
+        let selected_row = row.clone();
+        row.connect_clicked(move |_| {
+            select_sidebar_row(&sidebar, &selected_row);
+            if let Some(browser) = weak_browser.upgrade() {
+                browser.navigate(location.clone());
+            }
+        });
+
+        self.install_reorder_controllers(&row, id);
         self.widget.append(&row);
     }
 
     fn reorder_place(self: &Rc<Self>, source: &str, target: &str, after: bool) {
         let changed = reorder_places(&mut self.place_order.borrow_mut(), source, target, after);
         if changed {
+            save_place_order(&self.place_order.borrow());
             self.rebuild();
         }
     }
@@ -1244,19 +1257,20 @@ impl SidebarState {
         let weak_browser = Rc::downgrade(&self.browser);
         let sidebar = self.widget.clone();
         let selected_row = row.clone();
+        let click_volume = volume.clone();
         row.connect_clicked(move |button| {
             select_sidebar_row(&sidebar, &selected_row);
             let Some(browser) = weak_browser.upgrade() else {
                 return;
             };
-            if let Some(mount) = volume.get_mount() {
+            if let Some(mount) = click_volume.get_mount() {
                 navigate_to_gio_file(&browser, &mount.root());
                 return;
             }
 
             let window = button.root().and_downcast::<gtk::Window>();
             let operation = gtk::MountOperation::new(window.as_ref());
-            let volume = volume.clone();
+            let volume = click_volume.clone();
             glib::MainContext::default().spawn_local(async move {
                 match volume
                     .mount_future(gio::MountMountFlags::NONE, Some(&operation))
@@ -1278,6 +1292,117 @@ impl SidebarState {
                 }
             });
         });
+        let can_eject = volume.can_eject()
+            || volume
+                .get_mount()
+                .as_ref()
+                .is_some_and(|mount| mount.can_eject());
+        let can_unmount = volume
+            .get_mount()
+            .as_ref()
+            .is_some_and(|mount| mount.can_unmount());
+        if can_eject || can_unmount {
+            let menu = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            menu.add_css_class("folder-context-menu");
+            let action_name = if can_eject { "Eject…" } else { "Unmount…" };
+            let action =
+                sidebar_context_option(crate::assets::icons::HARD_DRIVE, action_name, true);
+            menu.append(&action);
+            let popover = gtk::Popover::builder()
+                .child(&menu)
+                .autohide(true)
+                .has_arrow(false)
+                .build();
+            popover.add_css_class("folder-context-popover");
+            popover.set_parent(&row);
+            let weak_popover = popover.downgrade();
+            let volume_action = volume.clone();
+            let row_action = row.clone();
+            action.connect_clicked(move |_| {
+                if let Some(popover) = weak_popover.upgrade() {
+                    popover.popdown();
+                }
+                let Some(window) = row_action.root().and_downcast::<gtk::Window>() else {
+                    return;
+                };
+                let operation = gtk::MountOperation::new(Some(&window));
+                let title = if can_eject {
+                    "Eject drive?"
+                } else {
+                    "Unmount drive?"
+                };
+                let dialog = gtk::AlertDialog::builder()
+                    .modal(true)
+                    .message(title)
+                    .detail(format!(
+                        "{} will be disconnected from Strata.",
+                        volume_action.name()
+                    ))
+                    .build();
+                let volume = volume_action.clone();
+                let operation = operation.clone();
+                let dialog_window = window.clone();
+                dialog.choose(Some(&window), None::<&gio::Cancellable>, move |result| {
+                    if result != Ok(0) {
+                        return;
+                    }
+                    glib::MainContext::default().spawn_local(async move {
+                        let result = if can_eject {
+                            if volume.can_eject() {
+                                volume
+                                    .eject_with_operation_future(
+                                        gio::MountUnmountFlags::NONE,
+                                        Some(&operation),
+                                    )
+                                    .await
+                            } else if let Some(mount) = volume.get_mount() {
+                                mount
+                                    .eject_with_operation_future(
+                                        gio::MountUnmountFlags::NONE,
+                                        Some(&operation),
+                                    )
+                                    .await
+                            } else {
+                                return;
+                            }
+                        } else if let Some(mount) = volume.get_mount() {
+                            mount
+                                .unmount_with_operation_future(
+                                    gio::MountUnmountFlags::NONE,
+                                    Some(&operation),
+                                )
+                                .await
+                        } else {
+                            return;
+                        };
+                        if let Err(error) = result {
+                            let error_dialog = gtk::AlertDialog::builder()
+                                .modal(true)
+                                .message("Unable to disconnect drive")
+                                .detail(error.to_string())
+                                .build();
+                            error_dialog.show(Some(&dialog_window));
+                        }
+                    });
+                });
+            });
+            let context = gtk::GestureClick::new();
+            context.set_button(3);
+            let weak_popover = popover.downgrade();
+            context.connect_pressed(move |gesture, _, x, y| {
+                gesture.set_state(gtk::EventSequenceState::Claimed);
+                if let Some(popover) = weak_popover.upgrade() {
+                    popover.set_pointing_to(Some(&gtk::gdk::Rectangle::new(
+                        x.round() as i32,
+                        y.round() as i32,
+                        1,
+                        1,
+                    )));
+                    popover.popup();
+                }
+            });
+            row.add_controller(context);
+        }
         self.widget.append(&row);
     }
 
@@ -1505,13 +1630,7 @@ fn build_sidebar(view: BrowserView) -> SidebarView {
         browser: view.browser(),
         view,
         volume_monitor,
-        place_order: RefCell::new(vec![
-            "desktop",
-            "documents",
-            "downloads",
-            "pictures",
-            "videos",
-        ]),
+        place_order: RefCell::new(load_place_order()),
         pinned_places: RefCell::new(load_pinned_places()),
         place_rows: RefCell::new(Vec::new()),
     });
@@ -1571,6 +1690,56 @@ fn build_sidebar(view: BrowserView) -> SidebarView {
 
 fn pinned_places_path() -> PathBuf {
     glib::user_config_dir().join("gtk-3.0/bookmarks")
+}
+
+fn place_order_path() -> PathBuf {
+    glib::user_config_dir().join("strata/sidebar-order")
+}
+
+fn load_place_order() -> Vec<&'static str> {
+    const DEFAULT: [&str; 7] = [
+        "home",
+        "trash",
+        "desktop",
+        "documents",
+        "downloads",
+        "pictures",
+        "videos",
+    ];
+    let mut order = std::fs::read_to_string(place_order_path())
+        .ok()
+        .map(|contents| {
+            contents
+                .lines()
+                .filter_map(|line| match line {
+                    "home" => Some("home"),
+                    "trash" => Some("trash"),
+                    "desktop" => Some("desktop"),
+                    "documents" => Some("documents"),
+                    "downloads" => Some("downloads"),
+                    "pictures" => Some("pictures"),
+                    "videos" => Some("videos"),
+                    _ => None,
+                })
+                .collect::<Vec<&'static str>>()
+        })
+        .unwrap_or_default();
+    for id in DEFAULT {
+        if !order.contains(&id) {
+            order.push(id);
+        }
+    }
+    order
+}
+
+fn save_place_order(order: &[&'static str]) {
+    let path = place_order_path();
+    let Some(parent) = path.parent() else {
+        return;
+    };
+    if std::fs::create_dir_all(parent).is_ok() {
+        let _ = std::fs::write(path, format!("{}\n", order.join("\n")));
+    }
 }
 
 fn load_pinned_places() -> Vec<(Location, String)> {

@@ -13,6 +13,7 @@ pub struct TabBar {
     root: gtk::ScrolledWindow,
     tabs: gtk::Box,
     new_button: gtk::Button,
+    tab_new_button: gtk::Button,
     trails: Rc<Trails>,
     browser: Rc<Browser>,
     capture_view: Rc<dyn Fn() -> TrailViewState>,
@@ -44,11 +45,20 @@ impl TabBar {
             18,
         )));
         new_button.add_css_class("header-action");
+        let tab_new_button = gtk::Button::builder()
+            .tooltip_text("New Tab (Ctrl+T)")
+            .build();
+        tab_new_button.set_child(Some(&crate::assets::text_icon(
+            crate::assets::icons::PLUS,
+            16,
+        )));
+        tab_new_button.add_css_class("tab-strip-new");
 
         let tab_bar = Rc::new(Self {
             root,
             tabs,
             new_button,
+            tab_new_button,
             trails,
             browser,
             capture_view,
@@ -56,6 +66,12 @@ impl TabBar {
         });
         let weak = Rc::downgrade(&tab_bar);
         tab_bar.new_button.connect_clicked(move |_| {
+            if let Some(tab_bar) = weak.upgrade() {
+                tab_bar.new_tab();
+            }
+        });
+        let weak = Rc::downgrade(&tab_bar);
+        tab_bar.tab_new_button.connect_clicked(move |_| {
             if let Some(tab_bar) = weak.upgrade() {
                 tab_bar.new_tab();
             }
@@ -107,11 +123,12 @@ impl TabBar {
         }
         let tabs = self.trails.all();
         let active = self.trails.active_id();
-        self.root.set_visible(tabs.len() > 1);
+        self.root.set_visible(!tabs.is_empty());
         for tab in &tabs {
             self.tabs
                 .append(&self.tab(tab, tabs.len(), active.as_ref()));
         }
+        self.tabs.append(&self.tab_new_button);
     }
 
     fn tab(self: &Rc<Self>, tab: &Trail, count: usize, active: Option<&TrailId>) -> gtk::Box {
