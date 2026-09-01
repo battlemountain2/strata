@@ -20,8 +20,16 @@ use crate::{
 
 const EXPLORER_COLUMN_WIDTHS: [i32; 4] = [600, 90, 120, 150];
 const DEFAULT_GRID_THUMBNAIL_SIZE: i32 = 64;
-const MIN_GRID_THUMBNAIL_SIZE: i32 = 64;
-const MAX_GRID_THUMBNAIL_SIZE: i32 = 256;
+const GRID_THUMBNAIL_SIZES: [i32; 8] = [48, 64, 80, 96, 128, 160, 192, 256];
+
+fn thumbnail_size_index(size: i32) -> usize {
+    GRID_THUMBNAIL_SIZES
+        .iter()
+        .enumerate()
+        .min_by_key(|(_, candidate)| (i64::from(**candidate) - i64::from(size)).abs())
+        .map(|(index, _)| index)
+        .unwrap_or(1)
+}
 
 #[derive(Clone)]
 struct ExplorerColumnLayout {
@@ -865,19 +873,23 @@ fn grid_controls(browser: &Rc<Browser>, depth: usize, thumbnail_size: i32) -> Gr
     thumbnail_title.add_css_class("grid-thumbnail-title");
     thumbnail_title.set_xalign(0.0);
     thumbnail_title.set_hexpand(true);
-    let thumbnail_value = gtk::Label::new(Some(&format!("{thumbnail_size} px")));
+    let thumbnail_index = thumbnail_size_index(thumbnail_size);
+    let thumbnail_value = gtk::Label::new(Some(&format!(
+        "{} px",
+        GRID_THUMBNAIL_SIZES[thumbnail_index]
+    )));
     thumbnail_value.add_css_class("grid-thumbnail-value");
     thumbnail_heading.append(&thumbnail_title);
     thumbnail_heading.append(&thumbnail_value);
     let thumbnail_scale = gtk::Scale::with_range(
         gtk::Orientation::Horizontal,
-        f64::from(MIN_GRID_THUMBNAIL_SIZE),
-        f64::from(MAX_GRID_THUMBNAIL_SIZE),
-        16.0,
+        0.0,
+        (GRID_THUMBNAIL_SIZES.len() - 1) as f64,
+        1.0,
     );
     thumbnail_scale.add_css_class("grid-thumbnail-scale");
     thumbnail_scale.set_draw_value(false);
-    thumbnail_scale.set_value(f64::from(thumbnail_size));
+    thumbnail_scale.set_value(thumbnail_index as f64);
     thumbnail_scale.set_size_request(220, -1);
     let thumbnail_extremes = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     thumbnail_extremes.add_css_class("grid-thumbnail-extremes");
@@ -1144,7 +1156,12 @@ fn build_grid_pane(
     controls
         .thumbnail_scale
         .connect_value_changed(move |scale| {
-            let size = scale.value().round() as i32;
+            let index = scale
+                .value()
+                .round()
+                .clamp(0.0, (GRID_THUMBNAIL_SIZES.len() - 1) as f64)
+                as usize;
+            let size = GRID_THUMBNAIL_SIZES[index];
             value_for_change.set_label(&format!("{size} px"));
             if let Some(pending) = pending_thumbnail_resize.take() {
                 pending.remove();
