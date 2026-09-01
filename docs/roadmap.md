@@ -85,7 +85,7 @@ The roadmap is ordered by risk and dependency rather than by visual prominence. 
 
 - Remote locations
 - Archive browsing
-- Independent panes and tabs
+- Independent panes
 - Saved workspaces
 - Batch rename
 - Global indexed search

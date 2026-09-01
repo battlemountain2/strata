@@ -99,107 +99,80 @@ headerbar menubutton.header-action > button:focus-visible image {
   opacity: 1;
 }
 
-headerbar menubutton.trail-switcher-button > button {
-  min-height: 30px;
-  min-width: 0;
-  padding: 0 10px;
-  margin: 0 4px;
-  border-radius: 7px;
-  color: @theme_dim_text;
-  background: transparent;
-  border: 1px solid transparent;
-  box-shadow: none;
+.tab-strip {
+  min-height: 37px;
+  background: @theme_surface;
+  border-bottom: 1px solid alpha(@theme_border, 0.7);
 }
 
-headerbar menubutton.trail-switcher-button > button:hover,
-headerbar menubutton.trail-switcher-button > button:checked,
-headerbar menubutton.trail-switcher-button > button:focus-visible {
+.tab-strip-content {
+  padding: 4px 7px 0;
+}
+
+.file-tab {
+  min-width: 128px;
+  min-height: 31px;
+  padding: 0 3px 0 5px;
+  border-radius: 7px 7px 0 0;
+  color: @theme_dim_text;
+  background: alpha(@theme_muted, 0.3);
+  border: 1px solid transparent;
+  border-bottom: 0;
+}
+
+.file-tab:hover {
   color: @theme_text;
   background: alpha(@theme_muted, 0.62);
-  border-color: alpha(@theme_border, 0.7);
 }
 
-.trail-switcher-popover contents {
-  min-width: 330px;
-  padding: 8px;
-  border-radius: 10px;
+.file-tab.active {
   color: @theme_text;
-  background: @theme_surface;
-  border: 1px solid alpha(@theme_border, 0.8);
+  background: @theme_bg;
+  border-color: alpha(@theme_border, 0.85);
+  box-shadow: inset 0 2px @theme_accent;
 }
 
-.trail-switcher-list {
-  padding: 2px;
-}
-
-.trail-switcher-heading {
-  padding: 6px 8px 7px;
-  color: @theme_dim_text;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1px;
-}
-
-.trail-row {
-  min-height: 34px;
-  padding: 2px;
-  border-radius: 7px;
-}
-
-.trail-row.active {
-  background: alpha(@theme_accent, 0.12);
-}
-
-.trail-select,
-.trail-row-action,
-.trail-create {
-  color: @theme_text;
+.file-tab-select,
+.file-tab-pin,
+.file-tab-close {
+  color: inherit;
   background: transparent;
   border: 0;
   box-shadow: none;
 }
 
-.trail-select {
-  padding: 4px 8px;
-}
-
-.trail-select label {
-  text-align: left;
-}
-
-.trail-row-action {
-  min-width: 28px;
-  min-height: 28px;
-  padding: 0;
-  border-radius: 6px;
-}
-
-.trail-row-action:hover,
-.trail-row-action.active,
-.trail-create:hover {
-  color: @theme_accent;
-  background: alpha(@theme_muted, 0.72);
-}
-
-.trail-row-action:disabled {
-  color: alpha(@theme_dim_text, 0.45);
-}
-
-.trail-rename {
-  min-height: 28px;
+.file-tab-select {
+  min-width: 92px;
   padding: 0 7px;
+}
+
+.file-tab-pin,
+.file-tab-close {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 5px;
+}
+
+.file-tab-close:hover {
+  color: @theme_accent;
+  background: alpha(@theme_muted, 0.8);
+}
+
+.file-tab-pin:hover,
+.file-tab-pin.active {
+  color: @theme_accent;
+}
+
+.file-tab-rename {
+  min-height: 24px;
+  margin: 2px;
+  padding: 0 6px;
   color: @theme_text;
   caret-color: @theme_accent;
   background: @theme_bg;
   border: 1px solid @theme_accent;
-  border-radius: 6px;
-}
-
-.trail-create {
-  margin-top: 5px;
-  padding: 7px 9px;
-  border-radius: 7px;
-  color: @theme_dim_text;
+  border-radius: 5px;
 }
 
 .appearance-popover contents {

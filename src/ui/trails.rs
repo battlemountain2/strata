@@ -6,184 +6,158 @@ use gtk::prelude::*;
 
 use crate::{
     app::{Browser, Trails},
-    model::{Trail, TrailViewState},
+    model::{Trail, TrailId, TrailViewState},
 };
 
-pub struct TrailSwitcher {
-    button: gtk::MenuButton,
-    title: gtk::Label,
-    popover: gtk::Popover,
-    list: gtk::Box,
+pub struct TabBar {
+    root: gtk::ScrolledWindow,
+    tabs: gtk::Box,
+    new_button: gtk::Button,
     trails: Rc<Trails>,
     browser: Rc<Browser>,
     capture_view: Rc<dyn Fn() -> TrailViewState>,
-    activate_trail: Rc<dyn Fn(Trail)>,
+    activate_tab: Rc<dyn Fn(Trail)>,
 }
 
-impl TrailSwitcher {
+impl TabBar {
     pub fn new(
         trails: Rc<Trails>,
         browser: Rc<Browser>,
         capture_view: Rc<dyn Fn() -> TrailViewState>,
-        activate_trail: Rc<dyn Fn(Trail)>,
+        activate_tab: Rc<dyn Fn(Trail)>,
     ) -> Rc<Self> {
-        let title = gtk::Label::new(None);
-        title.set_ellipsize(gtk::pango::EllipsizeMode::End);
-        title.set_max_width_chars(18);
-        let content = gtk::Box::new(gtk::Orientation::Horizontal, 7);
-        content.append(&crate::assets::text_icon(crate::assets::icons::ROWS, 16));
-        content.append(&title);
-
-        let button = gtk::MenuButton::builder()
-            .child(&content)
-            .tooltip_text("Switch Trails (Ctrl+Shift+T)")
+        let tabs = gtk::Box::new(gtk::Orientation::Horizontal, 3);
+        tabs.add_css_class("tab-strip-content");
+        let root = gtk::ScrolledWindow::builder()
+            .child(&tabs)
+            .hscrollbar_policy(gtk::PolicyType::Automatic)
+            .vscrollbar_policy(gtk::PolicyType::Never)
+            .hexpand(true)
             .build();
-        button.add_css_class("trail-switcher-button");
+        root.add_css_class("tab-strip");
 
-        let list = gtk::Box::new(gtk::Orientation::Vertical, 4);
-        list.add_css_class("trail-switcher-list");
-        let popover = gtk::Popover::builder().child(&list).build();
-        popover.add_css_class("trail-switcher-popover");
-        button.set_popover(Some(&popover));
+        let new_button = gtk::Button::builder()
+            .tooltip_text("New Tab (Ctrl+T)")
+            .build();
+        new_button.set_child(Some(&crate::assets::text_icon(
+            crate::assets::icons::PLUS,
+            18,
+        )));
+        new_button.add_css_class("header-action");
 
-        let switcher = Rc::new(Self {
-            button,
-            title,
-            popover,
-            list,
+        let tab_bar = Rc::new(Self {
+            root,
+            tabs,
+            new_button,
             trails,
             browser,
             capture_view,
-            activate_trail,
+            activate_tab,
         });
-        switcher.refresh();
-        switcher
+        let weak = Rc::downgrade(&tab_bar);
+        tab_bar.new_button.connect_clicked(move |_| {
+            if let Some(tab_bar) = weak.upgrade() {
+                tab_bar.new_tab();
+            }
+        });
+        tab_bar.refresh();
+        tab_bar
     }
 
-    pub fn widget(&self) -> gtk::MenuButton {
-        self.button.clone()
+    pub fn widget(&self) -> gtk::ScrolledWindow {
+        self.root.clone()
     }
 
-    pub fn popup(&self) {
-        self.popover.popup();
+    pub fn new_button(&self) -> gtk::Button {
+        self.new_button.clone()
+    }
+
+    pub fn new_tab(self: &Rc<Self>) {
+        let Some(location) = self.browser.active_location() else {
+            return;
+        };
+        if let Err(error) =
+            self.trails
+                .create(location.display_name(), location, (self.capture_view)())
+        {
+            tracing::warn!(%error, "unable to create tab");
+        }
+        self.refresh();
+    }
+
+    pub fn close_active(self: &Rc<Self>) {
+        let Some(active) = self.trails.active_id() else {
+            return;
+        };
+        self.close_tab(&active);
     }
 
     pub fn cycle(self: &Rc<Self>, offset: isize) {
         match self.trails.cycle(offset) {
-            Ok(Some(trail)) => (self.activate_trail)(trail),
+            Ok(Some(tab)) => (self.activate_tab)(tab),
             Ok(None) => {}
-            Err(error) => tracing::warn!(%error, "unable to cycle Trails"),
+            Err(error) => tracing::warn!(%error, "unable to cycle tabs"),
         }
         self.refresh();
     }
 
     fn refresh(self: &Rc<Self>) {
-        while let Some(child) = self.list.first_child() {
-            self.list.remove(&child);
+        while let Some(child) = self.tabs.first_child() {
+            self.tabs.remove(&child);
         }
-        let trails = self.trails.all();
+        let tabs = self.trails.all();
         let active = self.trails.active_id();
-        self.title.set_text(
-            trails
-                .iter()
-                .find(|trail| Some(&trail.id) == active.as_ref())
-                .map(|trail| trail.name.as_str())
-                .unwrap_or("Trails"),
-        );
-
-        let heading = gtk::Label::new(Some("TRAILS"));
-        heading.set_xalign(0.0);
-        heading.add_css_class("trail-switcher-heading");
-        self.list.append(&heading);
-
-        for trail in &trails {
-            self.list
-                .append(&self.trail_row(trail, trails.len(), active.as_ref()));
+        self.root.set_visible(tabs.len() > 1);
+        for tab in &tabs {
+            self.tabs
+                .append(&self.tab(tab, tabs.len(), active.as_ref()));
         }
-
-        let create = gtk::Button::builder()
-            .label("New Trail from here")
-            .tooltip_text("Save the current browsing context as a new Trail")
-            .build();
-        create.set_child(Some(&labeled_icon(
-            crate::assets::icons::PLUS,
-            "New Trail from here",
-        )));
-        create.add_css_class("trail-create");
-        let weak = Rc::downgrade(self);
-        create.connect_clicked(move |_| {
-            let Some(switcher) = weak.upgrade() else {
-                return;
-            };
-            let Some(location) = switcher.browser.active_location() else {
-                return;
-            };
-            let name = location.display_name();
-            if let Err(error) = switcher
-                .trails
-                .create(name, location, (switcher.capture_view)())
-            {
-                tracing::warn!(%error, "unable to create Trail");
-            }
-            switcher.refresh();
-        });
-        self.list.append(&create);
     }
 
-    fn trail_row(
-        self: &Rc<Self>,
-        trail: &Trail,
-        count: usize,
-        active: Option<&crate::model::TrailId>,
-    ) -> gtk::Box {
-        let row = gtk::Box::new(gtk::Orientation::Horizontal, 4);
-        row.add_css_class("trail-row");
-        let is_active = active == Some(&trail.id);
-        if is_active {
-            row.add_css_class("active");
+    fn tab(self: &Rc<Self>, tab: &Trail, count: usize, active: Option<&TrailId>) -> gtk::Box {
+        let item = gtk::Box::new(gtk::Orientation::Horizontal, 1);
+        item.add_css_class("file-tab");
+        if active == Some(&tab.id) {
+            item.add_css_class("active");
         }
 
-        let select = gtk::Button::with_label(&trail.name);
-        select.set_hexpand(true);
-        select.set_halign(gtk::Align::Fill);
-        select.add_css_class("trail-select");
+        let select = gtk::Button::with_label(&tab.name);
+        select.add_css_class("file-tab-select");
         select.set_tooltip_text(
-            trail
-                .active_location()
+            tab.active_location()
                 .map(|location| location.display_path())
                 .as_deref(),
         );
-        let id = trail.id.clone();
+        let id = tab.id.clone();
         let weak = Rc::downgrade(self);
         select.connect_clicked(move |_| {
-            let Some(switcher) = weak.upgrade() else {
+            let Some(tab_bar) = weak.upgrade() else {
                 return;
             };
-            match switcher.trails.activate(&id) {
-                Ok(Some(trail)) => (switcher.activate_trail)(trail),
+            match tab_bar.trails.activate(&id) {
+                Ok(Some(tab)) => (tab_bar.activate_tab)(tab),
                 Ok(None) => {}
-                Err(error) => tracing::warn!(%error, "unable to activate Trail"),
+                Err(error) => tracing::warn!(%error, "unable to activate tab"),
             }
-            switcher.popover.popdown();
-            switcher.refresh();
+            tab_bar.refresh();
         });
 
         let rename = gtk::Entry::builder()
-            .text(&trail.name)
-            .hexpand(true)
+            .text(&tab.name)
+            .width_chars(14)
             .visible(false)
             .build();
-        rename.add_css_class("trail-rename");
-        let rename_id = trail.id.clone();
+        rename.add_css_class("file-tab-rename");
+        let rename_id = tab.id.clone();
         let weak = Rc::downgrade(self);
         rename.connect_activate(move |entry| {
-            let Some(switcher) = weak.upgrade() else {
+            let Some(tab_bar) = weak.upgrade() else {
                 return;
             };
-            if let Err(error) = switcher.trails.rename(&rename_id, entry.text()) {
-                tracing::warn!(%error, "unable to rename Trail");
+            if let Err(error) = tab_bar.trails.rename(&rename_id, entry.text()) {
+                tracing::warn!(%error, "unable to rename tab");
             }
-            switcher.refresh();
+            tab_bar.refresh();
         });
         let rename_keys = gtk::EventControllerKey::new();
         let weak = Rc::downgrade(self);
@@ -191,83 +165,91 @@ impl TrailSwitcher {
             if key != gtk::gdk::Key::Escape {
                 return gtk::glib::Propagation::Proceed;
             }
-            if let Some(switcher) = weak.upgrade() {
-                switcher.refresh();
+            if let Some(tab_bar) = weak.upgrade() {
+                tab_bar.refresh();
             }
             gtk::glib::Propagation::Stop
         });
         rename.add_controller(rename_keys);
 
-        let edit = icon_button(crate::assets::icons::PENCIL, "Rename Trail");
+        let rename_click = gtk::GestureClick::new();
+        rename_click.set_button(1);
         let shown_select = select.clone();
         let shown_rename = rename.clone();
-        edit.connect_clicked(move |_| {
+        rename_click.connect_pressed(move |gesture, presses, _, _| {
+            if presses != 2 {
+                return;
+            }
+            let _claimed = gesture.set_state(gtk::EventSequenceState::Claimed);
             shown_select.set_visible(false);
             shown_rename.set_visible(true);
             shown_rename.grab_focus();
             shown_rename.select_region(0, -1);
         });
+        select.add_controller(rename_click);
 
-        let pin = icon_button(
+        let pin = gtk::Button::builder()
+            .tooltip_text(if tab.pinned { "Unpin Tab" } else { "Pin Tab" })
+            .build();
+        pin.set_child(Some(&crate::assets::text_icon(
             crate::assets::icons::PIN,
-            if trail.pinned {
-                "Unpin Trail"
-            } else {
-                "Pin Trail"
-            },
-        );
-        if trail.pinned {
+            12,
+        )));
+        pin.add_css_class("file-tab-pin");
+        if tab.pinned {
             pin.add_css_class("active");
         }
-        let pin_id = trail.id.clone();
+        let pin_id = tab.id.clone();
         let weak = Rc::downgrade(self);
         pin.connect_clicked(move |_| {
-            let Some(switcher) = weak.upgrade() else {
+            let Some(tab_bar) = weak.upgrade() else {
                 return;
             };
-            if let Err(error) = switcher.trails.toggle_pinned(&pin_id) {
-                tracing::warn!(%error, "unable to update Trail pin");
+            if let Err(error) = tab_bar.trails.toggle_pinned(&pin_id) {
+                tracing::warn!(%error, "unable to update pinned tab");
             }
-            switcher.refresh();
+            tab_bar.refresh();
         });
 
-        let close = icon_button(crate::assets::icons::X, "Close Trail");
+        let close = gtk::Button::builder()
+            .tooltip_text("Close Tab (Ctrl+W)")
+            .build();
+        close.set_child(Some(&crate::assets::text_icon(crate::assets::icons::X, 13)));
+        close.add_css_class("file-tab-close");
         close.set_sensitive(count > 1);
-        let close_id = trail.id.clone();
+        let close_id = tab.id.clone();
         let weak = Rc::downgrade(self);
         close.connect_clicked(move |_| {
-            let Some(switcher) = weak.upgrade() else {
-                return;
-            };
-            match switcher.trails.close(&close_id) {
-                Ok(Some(location)) => switcher.browser.navigate(location),
-                Ok(None) => {}
-                Err(error) => tracing::warn!(%error, "unable to close Trail"),
+            if let Some(tab_bar) = weak.upgrade() {
+                tab_bar.close_tab(&close_id);
             }
-            switcher.refresh();
         });
 
-        row.append(&select);
-        row.append(&rename);
-        row.append(&edit);
-        row.append(&pin);
-        row.append(&close);
-        row
+        let middle_click = gtk::GestureClick::new();
+        middle_click.set_button(2);
+        let middle_id = tab.id.clone();
+        let weak = Rc::downgrade(self);
+        middle_click.connect_pressed(move |gesture, _, _, _| {
+            if let Some(tab_bar) = weak.upgrade() {
+                tab_bar.close_tab(&middle_id);
+                let _claimed = gesture.set_state(gtk::EventSequenceState::Claimed);
+            }
+        });
+        item.add_controller(middle_click);
+
+        item.append(&select);
+        item.append(&rename);
+        item.append(&pin);
+        item.append(&close);
+        item
     }
-}
 
-fn icon_button(icon: &str, tooltip: &str) -> gtk::Button {
-    let button = gtk::Button::builder().tooltip_text(tooltip).build();
-    button.set_child(Some(&crate::assets::text_icon(icon, 14)));
-    button.add_css_class("trail-row-action");
-    button
-}
-
-fn labeled_icon(icon: &str, label: &str) -> gtk::Box {
-    let content = gtk::Box::new(gtk::Orientation::Horizontal, 7);
-    content.append(&crate::assets::text_icon(icon, 14));
-    let text = gtk::Label::new(Some(label));
-    text.set_xalign(0.0);
-    content.append(&text);
-    content
+    fn close_tab(self: &Rc<Self>, id: &TrailId) {
+        match self.trails.close(id) {
+            Ok(Some(tab)) => (self.activate_tab)(tab),
+            Ok(None) => {}
+            Err(error) => tracing::warn!(%error, "unable to close tab"),
+        }
+        self.refresh();
+    }
 }

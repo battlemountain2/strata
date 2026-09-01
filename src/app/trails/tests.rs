@@ -71,7 +71,10 @@ fn closing_the_active_trail_selects_its_neighbor() {
 
     let location = trails.close(&created).expect("close active Trail");
 
-    assert_eq!(location, Some(Location::local("/home/example")));
+    assert_eq!(
+        location.and_then(|trail| trail.active_location().cloned()),
+        Some(Location::local("/home/example"))
+    );
     assert_eq!(trails.all().len(), 1);
 }
 

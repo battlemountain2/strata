@@ -27,6 +27,7 @@ Strata is an experimental, keyboard-first file manager for Linux. It is designed
 - Collapsible sidebar
 - Compact and airy density modes
 - List, Explorer, and Grid views
+- Persistent tabs with independent browsing context
 - Omarchy and system theming
 - Complete keyboard navigation
 

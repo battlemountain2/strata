@@ -164,7 +164,7 @@ impl Trails {
         Ok(pinned)
     }
 
-    pub fn close(&self, id: &TrailId) -> io::Result<Option<Location>> {
+    pub fn close(&self, id: &TrailId) -> io::Result<Option<Trail>> {
         let mut stored = self.stored.borrow_mut();
         if stored.collection.trails.len() <= 1 {
             return Ok(None);
@@ -183,13 +183,9 @@ impl Trails {
             let next = position.min(stored.collection.trails.len() - 1);
             stored.collection.active = Some(stored.collection.trails[next].id.clone());
         }
-        let location = stored
-            .collection
-            .active_trail()
-            .and_then(Trail::active_location)
-            .cloned();
+        let next = stored.collection.active_trail().cloned();
         self.store.save(&stored)?;
-        Ok(was_active.then_some(location).flatten())
+        Ok(was_active.then_some(next).flatten())
     }
 
     pub fn update_active_location(&self, location: Location) -> io::Result<()> {

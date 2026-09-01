@@ -214,6 +214,16 @@ fn keybindings_page() -> gtk::Widget {
         append_keybinding(&content, label, keys);
     }
 
+    append_heading(&content, "TABS");
+    for (label, keys) in [
+        ("New tab", "Ctrl + T"),
+        ("Close tab", "Ctrl + W"),
+        ("Next tab", "Ctrl + Tab"),
+        ("Previous tab", "Ctrl + Shift + Tab"),
+    ] {
+        append_keybinding(&content, label, keys);
+    }
+
     let scroller = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vscrollbar_policy(gtk::PolicyType::Automatic)

@@ -26,7 +26,7 @@ use super::{
     motion::{animations_enabled, emphasized_deceleration},
     preview::PreviewDrawer,
     search::SearchDialog,
-    trails::TrailSwitcher,
+    trails::TabBar,
 };
 
 const SIDEBAR_WIDTH: i32 = 208;
@@ -149,7 +149,7 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     let activated_controller = controller.clone();
     let activated_sidebar = sidebar_toggle.clone();
     let activated_preview = preview.clone();
-    let activate_trail: Rc<dyn Fn(Trail)> = Rc::new(move |trail| {
+    let activate_tab: Rc<dyn Fn(Trail)> = Rc::new(move |trail| {
         activated_browser.set_view_mode(browser_mode(trail.view.browser_mode));
         activated_browser.set_density(browser_density(trail.view.density));
         activated_controller.set_preferences(trail.view.preferences);
@@ -161,11 +161,11 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
             activated_controller.navigate(location.clone());
         }
     });
-    let trail_switcher = TrailSwitcher::new(
+    let tab_bar = TabBar::new(
         trails.clone(),
         controller.clone(),
         capture_view.clone(),
-        activate_trail,
+        activate_tab,
     );
     let context_trails = trails.clone();
     let context_view = capture_view.clone();
@@ -183,7 +183,6 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
         }
     });
     header.pack_start(&sidebar_toggle);
-    header.pack_start(&trail_switcher.widget());
     header.pack_start(&browser.location_widget());
     let search_button = gtk::Button::builder()
         .tooltip_text("Search (Ctrl+K)")
@@ -214,6 +213,7 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
     let header_actions = gtk::Box::new(gtk::Orientation::Horizontal, 0);
     header_actions.add_css_class("header-actions");
     header_actions.append(&search_button);
+    header_actions.append(&tab_bar.new_button());
     header_actions.append(&appearance);
     header_actions.append(&settings);
     header_actions.append(&close_window);
@@ -221,6 +221,7 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
 
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
     root.append(&header);
+    root.append(&tab_bar.widget());
 
     let content = gtk::Paned::new(gtk::Orientation::Horizontal);
     content.set_wide_handle(false);
@@ -383,27 +384,31 @@ pub fn present_location(application: &gtk::Application, location: Option<PathBuf
         glib::Propagation::Stop
     });
     window.add_controller(settings_shortcut);
-    let trail_shortcut = gtk::EventControllerKey::new();
-    let shortcut_switcher = trail_switcher.clone();
-    trail_shortcut.connect_key_pressed(move |_, key, _, modifiers| {
+    let tab_shortcut = gtk::EventControllerKey::new();
+    let shortcut_tabs = tab_bar.clone();
+    tab_shortcut.connect_key_pressed(move |_, key, _, modifiers| {
         if key == gtk::gdk::Key::Tab && modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
-            shortcut_switcher.cycle(if modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) {
+            shortcut_tabs.cycle(if modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK) {
                 -1
             } else {
                 1
             });
             return glib::Propagation::Stop;
         }
-        if !matches!(key, gtk::gdk::Key::t | gtk::gdk::Key::T)
-            || !modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK)
-            || !modifiers.contains(gtk::gdk::ModifierType::SHIFT_MASK)
-        {
+        if !modifiers.contains(gtk::gdk::ModifierType::CONTROL_MASK) {
             return glib::Propagation::Proceed;
         }
-        shortcut_switcher.popup();
-        glib::Propagation::Stop
+        if matches!(key, gtk::gdk::Key::t | gtk::gdk::Key::T) {
+            shortcut_tabs.new_tab();
+            return glib::Propagation::Stop;
+        }
+        if matches!(key, gtk::gdk::Key::w | gtk::gdk::Key::W) {
+            shortcut_tabs.close_active();
+            return glib::Propagation::Stop;
+        }
+        glib::Propagation::Proceed
     });
-    window.add_controller(trail_shortcut);
+    window.add_controller(tab_shortcut);
     window.set_child(Some(&window_overlay));
     install_modal_focus_trap(&window);
     install_keyboard_navigation(
